@@ -5,13 +5,15 @@ import java.util.List;
 public class Player {
     private final String name;
     private final boolean human;
-    private int money;
+    private int biddingCash;
+    private int saleEarnings;
     private final List<Integer> hand = new ArrayList<>();
 
     public Player(String name, boolean human, int startingMoney) {
         this.name = name;
         this.human = human;
-        this.money = startingMoney;
+        this.biddingCash = startingMoney;
+        this.saleEarnings = 0;
     }
 
     public String getName() {
@@ -22,20 +24,28 @@ public class Player {
         return human;
     }
 
-    public int getMoney() {
-        return money;
+    public int getBiddingCash() {
+        return biddingCash;
+    }
+
+    public int getSaleEarnings() {
+        return saleEarnings;
+    }
+
+    public int getFinalTotal() {
+        return biddingCash + saleEarnings;
     }
 
     public List<Integer> getHand() {
         return Collections.unmodifiableList(hand);
     }
 
-    public void addMoney(int amount) {
-        money += amount;
+    public void spendFromBidding(int amount) {
+        biddingCash -= amount;
     }
 
-    public void spend(int amount) {
-        money -= amount;
+    public void addSaleEarnings(int amount) {
+        saleEarnings += amount;
     }
 
     public void addCard(int card) {
@@ -52,13 +62,5 @@ public class Player {
 
     public int handSize() {
         return hand.size();
-    }
-
-    public int highestCard() {
-        return hand.stream().mapToInt(Integer::intValue).max().orElse(0);
-    }
-
-    public int lowestCard() {
-        return hand.stream().mapToInt(Integer::intValue).min().orElse(0);
     }
 }

@@ -34,6 +34,7 @@ public class FourSaleGame {
         System.out.println("Buy low in Round 1, sell high in Round 2.");
         System.out.println("Cards are ranked 1 (lowest) through 20 (highest).");
         System.out.println("Each player starts with $" + formatMoney(GameConfig.STARTING_MONEY) + ".");
+        System.out.println("Unspent bidding cash counts toward your final score after selling.");
         System.out.println();
     }
 
@@ -83,25 +84,28 @@ public class FourSaleGame {
         int[] bids = new int[GameConfig.NUM_PLAYERS];
         int step = 0;
         int lastBid = 0;
-        boolean stepSet = false;
+        boolean auctionOpen = false;
 
         for (int offset = 0; offset < GameConfig.NUM_PLAYERS; offset++) {
             int playerIndex = (startingBidder + offset) % GameConfig.NUM_PLAYERS;
             Player player = players.get(playerIndex);
-            boolean opening = offset == 0;
 
             int bid;
-            if (player.isHuman()) {
-                bid = promptHumanBid(player, lot, opening, lastBid, step);
-            } else if (opening) {
-                int thousands = ai.chooseOpeningBidThousands(player, lot, roundIndex);
-                bid = thousands * GameConfig.BID_UNIT;
-                if (bid > 0) {
-                    System.out.println(player.getName() + " opens at $" + formatMoney(bid)
-                            + " (step $" + formatMoney(bid) + ").");
+            if (!auctionOpen) {
+                if (player.isHuman()) {
+                    bid = promptHumanBid(player, lot, true, lastBid, step);
                 } else {
-                    System.out.println(player.getName() + " passes.");
+                    int thousands = ai.chooseOpeningBidThousands(player, lot, roundIndex);
+                    bid = thousands * GameConfig.BID_UNIT;
+                    if (bid > 0) {
+                        System.out.println(player.getName() + " opens at $" + formatMoney(bid)
+                                + " (step $" + formatMoney(bid) + ").");
+                    } else {
+                        System.out.println(player.getName() + " passes.");
+                    }
                 }
+            } else if (player.isHuman()) {
+                bid = promptHumanBid(player, lot, false, lastBid, step);
             } else {
                 int minBid = lastBid + step;
                 int thousands = ai.chooseBidThousands(player, lot, minBid, step, roundIndex);
@@ -116,16 +120,18 @@ public class FourSaleGame {
             bids[playerIndex] = bid;
 
             if (bid > 0) {
-                if (!stepSet) {
+                if (!auctionOpen) {
                     step = bid;
-                    stepSet = true;
+                    auctionOpen = true;
                 }
                 lastBid = bid;
             }
         }
 
-        if (stepSet) {
+        if (auctionOpen) {
             System.out.println("Bid step this auction: $" + formatMoney(step) + ".");
+        } else {
+            System.out.println("Everyone passed — cards assigned for free by rank.");
         }
         return bids;
     }
@@ -133,7 +139,7 @@ public class FourSaleGame {
     private int promptHumanBid(Player player, List<Integer> lot, boolean opening,
             int lastBid, int step) {
         while (true) {
-            System.out.println("Your cash: $" + formatMoney(player.getMoney()));
+            System.out.println("Your bidding cash: $" + formatMoney(player.getBiddingCash()));
             if (opening) {
                 System.out.print("Opening bid for lot " + formatCards(lot)
                         + " — enter thousands (e.g. 2 = $2,000), or 0 to pass: ");
@@ -148,15 +154,7 @@ public class FourSaleGame {
 
             String line = scanner.nextLine().trim().replace(",", "").replace("$", "");
             if (line.equalsIgnoreCase("pass") || line.equals("0")) {
-                if (opening) {
-                    return 0;
-                }
-                int minBid = lastBid + step;
-                if (player.getMoney() >= minBid) {
-                    System.out.println("You can afford the minimum. Enter "
-                            + (minBid / GameConfig.BID_UNIT) + " or higher, or pass with 0.");
-                    continue;
-                }
+                System.out.println("You pass.");
                 return 0;
             }
 
@@ -177,8 +175,8 @@ public class FourSaleGame {
                 }
 
                 int bid = thousands * GameConfig.BID_UNIT;
-                if (bid > player.getMoney()) {
-                    System.out.println("You only have $" + formatMoney(player.getMoney()) + ".");
+                if (bid > player.getBiddingCash()) {
+                    System.out.println("You only have $" + formatMoney(player.getBiddingCash()) + ".");
                     continue;
                 }
 
@@ -230,7 +228,7 @@ public class FourSaleGame {
             int price = entry.bid();
 
             if (price > 0) {
-                player.spend(price);
+                player.spendFromBidding(price);
             }
             player.addCard(card);
             if (price > 0) {
@@ -247,6 +245,7 @@ public class FourSaleGame {
         System.out.println("--- ROUND 2: SELLING ---");
         System.out.println("Four prices appear. Offer one card each.");
         System.out.println("Highest card earns the highest price, and so on.");
+        System.out.println("Sale money is tracked separately; leftover bidding cash is added at the end.");
         System.out.println();
 
         for (int round = 0; round < GameConfig.ROUNDS; round++) {
@@ -320,7 +319,7 @@ public class FourSaleGame {
             int payout = sortedPrices.get(i);
 
             player.removeCard(card);
-            player.addMoney(payout);
+            player.addSaleEarnings(payout);
             System.out.println("  " + player.getName() + " sells card " + card
                     + " for $" + formatMoney(payout) + ".");
         }
@@ -329,12 +328,14 @@ public class FourSaleGame {
     private void announceWinner() {
         System.out.println("=== FINAL SCORES ===");
         List<Player> ranking = new ArrayList<>(players);
-        ranking.sort(Comparator.comparingInt(Player::getMoney).reversed());
+        ranking.sort(Comparator.comparingInt(Player::getFinalTotal).reversed());
 
         for (int i = 0; i < ranking.size(); i++) {
             Player player = ranking.get(i);
             System.out.println((i + 1) + ". " + player.getName() + ": $"
-                    + formatMoney(player.getMoney()));
+                    + formatMoney(player.getFinalTotal())
+                    + " ($" + formatMoney(player.getBiddingCash()) + " leftover + $"
+                    + formatMoney(player.getSaleEarnings()) + " from sales)");
         }
 
         Player winner = ranking.get(0);
@@ -347,7 +348,12 @@ public class FourSaleGame {
     }
 
     private void pauseBetweenPhases() {
-        System.out.println("Bidding complete. Press Enter to start selling...");
+        System.out.println("Bidding complete. Leftover cash is kept for your final score.");
+        for (Player player : players) {
+            System.out.println("  " + player.getName() + ": $"
+                    + formatMoney(player.getBiddingCash()) + " remaining");
+        }
+        System.out.println("Press Enter to start selling...");
         scanner.nextLine();
         System.out.println();
     }
@@ -357,8 +363,11 @@ public class FourSaleGame {
         for (Player player : players) {
             String hand = player.handSize() == 0 ? "none"
                     : formatCards(new ArrayList<>(player.getHand()));
-            System.out.println("  " + player.getName() + " — $"
-                    + formatMoney(player.getMoney()) + " | cards: " + hand);
+            String moneyLine = player.getSaleEarnings() > 0
+                    ? "$" + formatMoney(player.getBiddingCash()) + " bidding + $"
+                            + formatMoney(player.getSaleEarnings()) + " sales"
+                    : "$" + formatMoney(player.getBiddingCash()) + " cash";
+            System.out.println("  " + player.getName() + " — " + moneyLine + " | cards: " + hand);
         }
     }
 

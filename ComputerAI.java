@@ -15,8 +15,11 @@ public class ComputerAI {
         Collections.sort(sortedLot, Collections.reverseOrder());
         int topCard = sortedLot.get(0);
 
-        int maxThousands = player.getMoney() / GameConfig.BID_UNIT;
+        int maxThousands = player.getBiddingCash() / GameConfig.BID_UNIT;
         if (maxThousands < GameConfig.MIN_OPENING_BID_THOUSANDS) {
+            return 0;
+        }
+        if (lotIsWeakLot(sortedLot) && random.nextDouble() < 0.35) {
             return 0;
         }
 
@@ -28,14 +31,15 @@ public class ComputerAI {
         desired = Math.min(desired, maxThousands);
 
         int roundsLeft = GameConfig.ROUNDS - roundIndex;
-        int budgetCap = Math.max(1, player.getMoney() / (GameConfig.BID_UNIT * Math.max(1, roundsLeft) * 2));
+        int budgetCap = Math.max(1, player.getBiddingCash()
+                / (GameConfig.BID_UNIT * Math.max(1, roundsLeft) * 2));
         return Math.min(desired, budgetCap);
     }
 
     public int chooseBidThousands(Player player, List<Integer> lot, int minBid, int step,
             int roundIndex) {
         int minThousands = minBid / GameConfig.BID_UNIT;
-        int maxThousands = player.getMoney() / GameConfig.BID_UNIT;
+        int maxThousands = player.getBiddingCash() / GameConfig.BID_UNIT;
 
         if (maxThousands < minThousands) {
             return 0;
@@ -48,11 +52,17 @@ public class ComputerAI {
         boolean lotIsStrong = topCard >= 14;
         boolean lotIsWeak = topCard <= 8;
 
-        if (lotIsWeak && minThousands >= 6) {
+        if (lotIsWeak && random.nextDouble() < 0.7) {
+            return 0;
+        }
+        if (minThousands >= 8 && random.nextDouble() < 0.45) {
+            return 0;
+        }
+        if (random.nextDouble() < 0.12) {
             return 0;
         }
 
-        if (lotIsStrong && player.getMoney() > minBid + step * 2) {
+        if (lotIsStrong && player.getBiddingCash() > minBid + step * 2) {
             if (random.nextDouble() < 0.55) {
                 int raise = 1 + random.nextInt(2);
                 return Math.min(minThousands + raise, maxThousands);
@@ -89,5 +99,9 @@ public class ComputerAI {
             return hand.get(Math.max(0, midIndex - 1));
         }
         return hand.get(midIndex);
+    }
+
+    private boolean lotIsWeakLot(List<Integer> sortedLot) {
+        return sortedLot.get(0) <= 8;
     }
 }
