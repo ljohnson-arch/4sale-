@@ -37,7 +37,7 @@ public class ComputerAI {
     }
 
     public int chooseBidThousands(Player player, List<Integer> lot, int minBid, int step,
-            int roundIndex) {
+            int roundIndex, int currentBid) {
         int minThousands = minBid / GameConfig.BID_UNIT;
         int maxThousands = player.getBiddingCash() / GameConfig.BID_UNIT;
 
@@ -52,13 +52,16 @@ public class ComputerAI {
         boolean lotIsStrong = topCard >= 14;
         boolean lotIsWeak = topCard <= 8;
 
-        if (lotIsWeak && random.nextDouble() < 0.7) {
+        if (currentBid > 0 && currentBid == minBid - step && random.nextDouble() < 0.55) {
             return 0;
         }
-        if (minThousands >= 8 && random.nextDouble() < 0.45) {
+        if (lotIsWeak && random.nextDouble() < 0.65) {
             return 0;
         }
-        if (random.nextDouble() < 0.12) {
+        if (minThousands >= 8 && random.nextDouble() < 0.5) {
+            return 0;
+        }
+        if (random.nextDouble() < 0.18) {
             return 0;
         }
 
@@ -87,10 +90,10 @@ public class ComputerAI {
         List<Integer> hand = new ArrayList<>(player.getHand());
         Collections.sort(hand);
 
-        if (priceSpread < 1500 || topPrice < 3500) {
+        if (priceSpread < GameConfig.BID_UNIT * 2 || topPrice < GameConfig.BID_UNIT * 3) {
             return hand.get(0);
         }
-        if (topPrice > 7500) {
+        if (topPrice >= GameConfig.BID_UNIT * 7) {
             return hand.get(hand.size() - 1);
         }
 

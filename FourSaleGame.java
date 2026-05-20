@@ -58,8 +58,9 @@ public class FourSaleGame {
         System.out.println("--- ROUND 1: BIDDING ---");
         System.out.println("Four cards are auctioned at a time.");
         System.out.println("Bids are in $1,000 steps. The opening bid sets the step.");
-        System.out.println("Each later bid must be at least the previous bid plus that step.");
-        System.out.println("Highest bid wins the highest card, and so on.");
+        System.out.println("Each raise must be at least the current high bid plus that step.");
+        System.out.println("Players take turns until everyone has passed.");
+        System.out.println("Your final bid (or $0) decides which card you get.");
         System.out.println();
 
         for (int round = 0; round < GameConfig.ROUNDS; round++) {
@@ -81,75 +82,94 @@ public class FourSaleGame {
     }
 
     private int[] collectBids(List<Integer> lot, int roundIndex, int startingBidder) {
-        int[] bids = new int[GameConfig.NUM_PLAYERS];
+        int[] finalBids = new int[GameConfig.NUM_PLAYERS];
+        boolean[] passed = new boolean[GameConfig.NUM_PLAYERS];
         int step = 0;
         int lastBid = 0;
         boolean auctionOpen = false;
+        int passedCount = 0;
+        int current = startingBidder;
 
-        for (int offset = 0; offset < GameConfig.NUM_PLAYERS; offset++) {
-            int playerIndex = (startingBidder + offset) % GameConfig.NUM_PLAYERS;
-            Player player = players.get(playerIndex);
+        System.out.println(players.get(startingBidder).getName() + " bids first.");
 
-            int bid;
-            if (!auctionOpen) {
-                if (player.isHuman()) {
-                    bid = promptHumanBid(player, lot, true, lastBid, step);
-                } else {
-                    int thousands = ai.chooseOpeningBidThousands(player, lot, roundIndex);
-                    bid = thousands * GameConfig.BID_UNIT;
-                    if (bid > 0) {
-                        System.out.println(player.getName() + " opens at $" + formatMoney(bid)
-                                + " (step $" + formatMoney(bid) + ").");
-                    } else {
-                        System.out.println(player.getName() + " passes.");
-                    }
+        while (passedCount < GameConfig.NUM_PLAYERS) {
+            if (passed[current]) {
+                current = (current + 1) % GameConfig.NUM_PLAYERS;
+                continue;
+            }
+
+            Player player = players.get(current);
+            boolean opening = !auctionOpen;
+            int bid = takeTurnBid(player, lot, roundIndex, opening, lastBid, step, finalBids[current]);
+
+            if (bid > 0) {
+                finalBids[current] = bid;
+                if (!auctionOpen) {
+                    step = bid;
+                    auctionOpen = true;
+                    System.out.println("Bid step: $" + formatMoney(step) + " per raise.");
                 }
-            } else if (player.isHuman()) {
-                bid = promptHumanBid(player, lot, false, lastBid, step);
+                lastBid = bid;
             } else {
-                int minBid = lastBid + step;
-                int thousands = ai.chooseBidThousands(player, lot, minBid, step, roundIndex);
-                bid = thousands * GameConfig.BID_UNIT;
-                if (bid > 0) {
-                    System.out.println(player.getName() + " bids $" + formatMoney(bid) + ".");
+                passed[current] = true;
+                passedCount++;
+                if (finalBids[current] > 0) {
+                    System.out.println(player.getName() + " passes (stays at $"
+                            + formatMoney(finalBids[current]) + ").");
                 } else {
                     System.out.println(player.getName() + " passes.");
                 }
             }
 
-            bids[playerIndex] = bid;
-
-            if (bid > 0) {
-                if (!auctionOpen) {
-                    step = bid;
-                    auctionOpen = true;
-                }
-                lastBid = bid;
-            }
+            current = (current + 1) % GameConfig.NUM_PLAYERS;
         }
 
-        if (auctionOpen) {
-            System.out.println("Bid step this auction: $" + formatMoney(step) + ".");
-        } else {
+        if (!auctionOpen) {
             System.out.println("Everyone passed — cards assigned for free by rank.");
         }
-        return bids;
+        return finalBids;
+    }
+
+    private int takeTurnBid(Player player, List<Integer> lot, int roundIndex, boolean opening,
+            int lastBid, int step, int playerCurrentBid) {
+        if (player.isHuman()) {
+            return promptHumanBid(player, lot, opening, lastBid, step, playerCurrentBid);
+        }
+        if (opening) {
+            int thousands = ai.chooseOpeningBidThousands(player, lot, roundIndex);
+            int bid = thousands * GameConfig.BID_UNIT;
+            if (bid > 0) {
+                System.out.println(player.getName() + " opens at $" + formatMoney(bid) + ".");
+            }
+            return bid;
+        }
+        int minBid = lastBid + step;
+        int thousands = ai.chooseBidThousands(player, lot, minBid, step, roundIndex,
+                playerCurrentBid);
+        int bid = thousands * GameConfig.BID_UNIT;
+        if (bid > 0) {
+            System.out.println(player.getName() + " bids $" + formatMoney(bid) + ".");
+        }
+        return bid;
     }
 
     private int promptHumanBid(Player player, List<Integer> lot, boolean opening,
-            int lastBid, int step) {
+            int lastBid, int step, int yourCurrentBid) {
         while (true) {
             System.out.println("Your bidding cash: $" + formatMoney(player.getBiddingCash()));
+            if (yourCurrentBid > 0) {
+                System.out.println("Your bid so far this auction: $" + formatMoney(yourCurrentBid));
+            }
             if (opening) {
-                System.out.print("Opening bid for lot " + formatCards(lot)
-                        + " — enter thousands (e.g. 2 = $2,000), or 0 to pass: ");
+                System.out.print("Open the auction for lot " + formatCards(lot)
+                        + " — thousands (e.g. 2 = $2,000), or 0 to pass: ");
             } else {
                 int minBid = lastBid + step;
-                System.out.println("Current high bid: $" + formatMoney(lastBid)
-                        + ". Step: $" + formatMoney(step) + ".");
-                System.out.print("Minimum bid: $" + formatMoney(minBid)
-                        + " — enter thousands (e.g. " + (minBid / GameConfig.BID_UNIT)
-                        + " = $" + formatMoney(minBid) + "), or 0 to pass: ");
+                System.out.println("High bid: $" + formatMoney(lastBid)
+                        + " | step: $" + formatMoney(step)
+                        + " | minimum raise: $" + formatMoney(minBid));
+                System.out.print("Bid thousands (min " + (minBid / GameConfig.BID_UNIT)
+                        + "), or 0 to pass and leave the auction: ");
             }
 
             String line = scanner.nextLine().trim().replace(",", "").replace("$", "");
@@ -235,15 +255,15 @@ public class FourSaleGame {
                 System.out.println("  " + player.getName() + " pays $" + formatMoney(price)
                         + " and receives card " + card + ".");
             } else {
-                System.out.println("  " + player.getName() + " passes and receives card "
-                        + card + ".");
+                System.out.println("  " + player.getName() + " receives card " + card
+                        + " (did not bid).");
             }
         }
     }
 
     private void runSellingPhase() {
         System.out.println("--- ROUND 2: SELLING ---");
-        System.out.println("Four prices appear. Offer one card each.");
+        System.out.println("Four prices appear (whole $1,000 amounts). Offer one card each.");
         System.out.println("Highest card earns the highest price, and so on.");
         System.out.println("Sale money is tracked separately; leftover bidding cash is added at the end.");
         System.out.println();
@@ -251,7 +271,8 @@ public class FourSaleGame {
         for (int round = 0; round < GameConfig.ROUNDS; round++) {
             List<Integer> prices = new ArrayList<>();
             for (int i = 0; i < GameConfig.CARDS_PER_ROUND; i++) {
-                prices.add(random.nextInt(GameConfig.MAX_SELL_PRICE + 1));
+                int thousands = random.nextInt(GameConfig.MAX_SELL_PRICE_THOUSANDS + 1);
+                prices.add(thousands * GameConfig.BID_UNIT);
             }
             prices.sort(Collections.reverseOrder());
 
