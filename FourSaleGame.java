@@ -89,6 +89,7 @@ public class FourSaleGame {
         boolean auctionOpen = false;
         int passedCount = 0;
         int current = startingBidder;
+        int highBidderIndex = -1;
 
         System.out.println(players.get(startingBidder).getName() + " bids first.");
 
@@ -96,6 +97,13 @@ public class FourSaleGame {
             if (passed[current]) {
                 current = (current + 1) % GameConfig.NUM_PLAYERS;
                 continue;
+            }
+
+            if (auctionOpen && highBidderIndex >= 0 && allOthersPassed(passed, highBidderIndex)) {
+                Player winner = players.get(highBidderIndex);
+                System.out.println(winner.getName() + " wins the auction at $"
+                        + formatMoney(finalBids[highBidderIndex]) + "!");
+                break;
             }
 
             Player player = players.get(current);
@@ -110,6 +118,7 @@ public class FourSaleGame {
                     System.out.println("Bid step: $" + formatMoney(step) + " per raise.");
                 }
                 lastBid = bid;
+                highBidderIndex = current;
             } else {
                 passed[current] = true;
                 passedCount++;
@@ -118,6 +127,13 @@ public class FourSaleGame {
                             + formatMoney(finalBids[current]) + ").");
                 } else {
                     System.out.println(player.getName() + " passes.");
+                }
+
+                if (auctionOpen && highBidderIndex >= 0 && allOthersPassed(passed, highBidderIndex)) {
+                    Player winner = players.get(highBidderIndex);
+                    System.out.println(winner.getName() + " wins the auction at $"
+                            + formatMoney(finalBids[highBidderIndex]) + "!");
+                    break;
                 }
             }
 
@@ -130,10 +146,25 @@ public class FourSaleGame {
         return finalBids;
     }
 
+    private boolean allOthersPassed(boolean[] passed, int highBidderIndex) {
+        for (int i = 0; i < passed.length; i++) {
+            if (i != highBidderIndex && !passed[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private int takeTurnBid(Player player, List<Integer> lot, int roundIndex, boolean opening,
             int lastBid, int step, int playerCurrentBid) {
+        int minRequired = minimumRequiredBid(opening, lastBid, step);
+        if (player.getBiddingCash() < minRequired) {
+            System.out.println(player.getName() + " cannot afford the minimum bid of $"
+                    + formatMoney(minRequired) + " and must pass.");
+            return 0;
+        }
         if (player.isHuman()) {
-            return promptHumanBid(player, lot, opening, lastBid, step, playerCurrentBid);
+            return promptHumanBid(player, lot, opening, lastBid, step, playerCurrentBid, minRequired);
         }
         if (opening) {
             int thousands = ai.chooseOpeningBidThousands(player, lot, roundIndex);
@@ -153,8 +184,15 @@ public class FourSaleGame {
         return bid;
     }
 
+    private int minimumRequiredBid(boolean opening, int lastBid, int step) {
+        if (opening) {
+            return GameConfig.MIN_OPENING_BID_THOUSANDS * GameConfig.BID_UNIT;
+        }
+        return lastBid + step;
+    }
+
     private int promptHumanBid(Player player, List<Integer> lot, boolean opening,
-            int lastBid, int step, int yourCurrentBid) {
+            int lastBid, int step, int yourCurrentBid, int minRequired) {
         while (true) {
             System.out.println("Your bidding cash: $" + formatMoney(player.getBiddingCash()));
             if (yourCurrentBid > 0) {
@@ -162,13 +200,13 @@ public class FourSaleGame {
             }
             if (opening) {
                 System.out.print("Open the auction for lot " + formatCards(lot)
-                        + " — thousands (e.g. 2 = $2,000), or 0 to pass: ");
+                        + " — thousands (min " + (minRequired / GameConfig.BID_UNIT)
+                        + " = $" + formatMoney(minRequired) + "), or 0 to pass: ");
             } else {
-                int minBid = lastBid + step;
                 System.out.println("High bid: $" + formatMoney(lastBid)
                         + " | step: $" + formatMoney(step)
-                        + " | minimum raise: $" + formatMoney(minBid));
-                System.out.print("Bid thousands (min " + (minBid / GameConfig.BID_UNIT)
+                        + " | minimum raise: $" + formatMoney(minRequired));
+                System.out.print("Bid thousands (min " + (minRequired / GameConfig.BID_UNIT)
                         + "), or 0 to pass and leave the auction: ");
             }
 
@@ -196,8 +234,9 @@ public class FourSaleGame {
 
                 int bid = thousands * GameConfig.BID_UNIT;
                 if (bid > player.getBiddingCash()) {
-                    System.out.println("You only have $" + formatMoney(player.getBiddingCash()) + ".");
-                    continue;
+                    System.out.println("You only have $" + formatMoney(player.getBiddingCash())
+                            + " — you must pass.");
+                    return 0;
                 }
 
                 if (opening) {
@@ -207,9 +246,8 @@ public class FourSaleGame {
                     continue;
                 }
 
-                int minBid = lastBid + step;
-                if (bid < minBid) {
-                    System.out.println("Bid must be at least $" + formatMoney(minBid) + ".");
+                if (bid < minRequired) {
+                    System.out.println("Bid must be at least $" + formatMoney(minRequired) + ".");
                     continue;
                 }
                 if (bid == lastBid) {
