@@ -39,10 +39,49 @@ public class FourSaleGame {
     }
 
     private void setupPlayers() {
-        players.add(new Player("You", true, GameConfig.STARTING_MONEY));
-        players.add(new Player("Alex", false, GameConfig.STARTING_MONEY));
-        players.add(new Player("Blake", false, GameConfig.STARTING_MONEY));
-        players.add(new Player("Casey", false, GameConfig.STARTING_MONEY));
+        System.out.println("This game has " + GameConfig.NUM_PLAYERS
+                + " players. Choose how many are human and how many are computer.");
+        int humanCount;
+        int computerCount;
+        while (true) {
+            humanCount = promptPlayerCount("human", GameConfig.NUM_PLAYERS);
+            computerCount = promptPlayerCount("computer", GameConfig.NUM_PLAYERS);
+            if (humanCount + computerCount == GameConfig.NUM_PLAYERS) {
+                break;
+            }
+            System.out.println("Human and computer players must add up to "
+                    + GameConfig.NUM_PLAYERS + ". Try again.");
+            System.out.println();
+        }
+        System.out.println("Starting game with " + humanCount + " human and " + computerCount
+                + " computer player(s).");
+        System.out.println();
+
+        String[] computerNames = {"Alex", "Blake", "Casey", "Dana"};
+        for (int i = 0; i < humanCount; i++) {
+            String name = humanCount == 1 ? "You" : "Player " + (i + 1);
+            players.add(new Player(name, true, GameConfig.STARTING_MONEY));
+        }
+        for (int i = 0; i < computerCount; i++) {
+            players.add(new Player(computerNames[i], false, GameConfig.STARTING_MONEY));
+        }
+    }
+
+    private int promptPlayerCount(String role, int max) {
+        while (true) {
+            System.out.print("How many " + role + " players? (0-" + max + "): ");
+            String line = scanner.nextLine().trim();
+            try {
+                int count = Integer.parseInt(line);
+                if (count < 0 || count > max) {
+                    System.out.println("Enter a number from 0 to " + max + ".");
+                    continue;
+                }
+                return count;
+            } catch (NumberFormatException e) {
+                System.out.println("Enter a whole number.");
+            }
+        }
     }
 
     private List<Integer> buildShuffledDeck() {
@@ -400,7 +439,7 @@ public class FourSaleGame {
         Player winner = ranking.get(0);
         System.out.println();
         if (winner.isHuman()) {
-            System.out.println("You win!");
+            System.out.println(winner.getName() + " wins!");
         } else {
             System.out.println(winner.getName() + " wins. Better luck next time.");
         }
